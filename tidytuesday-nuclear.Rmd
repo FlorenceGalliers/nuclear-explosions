@@ -1,0 +1,32 @@
+---
+title: "tidytuesday-nuclear"
+author: "Florence Galliers"
+date: "13/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, import}
+nuclear <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-08-20/nuclear_explosions.csv")
+
+library(ggplot2)
+
+```
+
+
+```{r pressure, echo=FALSE}
+head(nuclear)
+
+2ggplot(nuclear,
+       aes(x = year,
+           y = type)) +
+  geom_point()
+
+unique(nuclear$country)
+
+```
+
