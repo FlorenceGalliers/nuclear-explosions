@@ -13,20 +13,448 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, import}
 nuclear <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-08-20/nuclear_explosions.csv")
 
+
 library(ggplot2)
+library(tidyverse)
+library(RColorBrewer)
+library(gganimate)
+library(sp)
+library(maptools)
+library(maps)
+library(raster)
+library(mapdata)
+library(ggmap)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rgeos)
+library(plotly)
+library(leaftime)
+
 
 ```
 
+The dataset used here is the TidyTuesday Nuclear Explosions dataset. It contains 2051 observations of nuclear explosions that occurred between 1945 and 1998. Not every year saw a nuclear explosion.
 
-```{r pressure, echo=FALSE}
+The observation data includes:
+- Date of event: long date and year.
+- ID Number: unique ID number for each event
+- Country: country that deployed the explosion
+- Region: region where the nuclear explosion was deployed to
+- Source: the source that reported the explosion event
+- Latitude and Longitude position of explosion
+- Magnitude of body wave of explosion (mb)
+- Magnitude of surface wave of explosion (Ms)
+- Depth at detonation (km), negative values = height above ground
+- Upper and Lower yield estimates in kilotons of TNT
+- Purpose of detonation
+- Name of event or bomb
+- Method of deployment (type)
+
+First I need to explore and tidy up the data.
+
+```{r explore, echo=FALSE}
 head(nuclear)
 
-2ggplot(nuclear,
+# I am going to start by plotting a timeline of explosions, sorted by their
+# method of deployment.
+ggplot(nuclear,
        aes(x = year,
-           y = type)) +
-  geom_point()
+           y = type,
+           colour = country,
+           size = yield_upper)) +
+  geom_point() +
+  labs(x = "Year",
+       y = "Method of Deployment") +
+  geom_jitter() +
+  scale_colour_brewer(palette = "Paired") +
+  theme_minimal()
+
+# Can also see that there are overlapping types - need to sort these out
 
 unique(nuclear$country)
+unique(nuclear$year)
+unique(nuclear$region)
+unique(nuclear$source)
+
+summary(nuclear$magnitude_body)
+summary(nuclear$magnitude_surface)
+summary(nuclear$yield_lower)
+summary(nuclear$yield_upper)
+summary(nuclear$depth)
+
+# 28 unique purposes, some of them overlap...
+unique(nuclear$type)
+
+# rename a few variables to tidy things up
+which(nuclear$type == "WATER SU") #457
+which(nuclear$type == "WATERSUR") #351
+
+nuclear$type[nuclear$type == "WATER SU"] <- "WATER"
+nuclear$type[nuclear$type == "WATERSUR"] <- "WATER"
+# check its been successful
+which(nuclear$type == "WATER")
+
+nuclear$type[nuclear$type == "SHAFT/GR"] <- "SHAFT"
+nuclear$type[nuclear$type == "SHAFT/LG"] <- "SHAFT"
+which(nuclear$type == "SHAFT")
+
+nuclear$type[nuclear$type == "GALLERY"] <- "TUNNEL"
+which(nuclear$type == "TUNNEL")
+
+nuclear$type[nuclear$type == "CRATER"] <- "SURFACE"
+
+nuclear$type[nuclear$type == "MINE"] <- "UG"
+
+# SHIP, SPACE, UW AND WATER HAVE LESS THAN 10 - group into 'others' category
+nuclear$type[nuclear$type == "SHIP"] <- "OTHER"
+nuclear$type[nuclear$type == "SPACE"] <- "OTHER"
+nuclear$type[nuclear$type == "UW"] <- "OTHER"
+nuclear$type[nuclear$type == "WATER"] <- "OTHER"
+# Left now with 11 tidy types
+
+# Lets tackle purpose
+unique(nuclear$purpose)
+
+nuclear$type <- as.factor(nuclear$type)
+summary(nuclear$type)
+
+```
+
+```{r}
+plot(nuclear$year, nuclear$magnitude_body)
+plot(nuclear$year, nuclear$magnitude_surface)
+plot(nuclear$year, nuclear$yield_upper)
+
+# some explosions seem to have yield and magnitudes of 0?? Does this mean they didn't happen?
+
+which(nuclear$magnitude_body == 0)
+which(nuclear$magnitude_surface == 0)
+which(nuclear$yield_upper == 0)
+# If yield is the kilotons of TNT, then this is probably the best size measurement. 
+# Will remove these that equal 0 later.
+
+ggplot(nuclear,
+        aes(country)) +
+  geom_bar()
+# USA have deployed the most nuclear explosions, followed by USSR. But where to?
+
+ggplot(nuclear,
+       aes(region)) +
+  geom_bar()
+# One region seems to have had the most explosions deployed there - where is this?
+# and another fairly high
+
+table(nuclear$region)
+# "NTS" Region - 928 explosions.
+# "455 explosions in Semi Kazakh
+# A little research shows this is the Nevada Test Site, would make sense as USA have
+# deployed the most nuclear explosions. 
+
+# This table has also shown a lot of errors/duplicates in names, lets fix these below:
+
+nuclear$region[nuclear$region == "AZGIE KAZAKH"] <- "AZGIR KAZAKH"
+nuclear$region[nuclear$region == "AZGIR"] <- "AZGIR KAZAKH"
+nuclear$region[nuclear$region == "BASHKI RUSS"] <- "BASHKIR RUSS"
+nuclear$region[nuclear$region == "FANGATAUFAA"] <- "FANGATAUFA"
+nuclear$region[nuclear$region == "JAKUTS RUSE"] <- "JAKUTS RUSS"
+nuclear$region[nuclear$region == "KAZAKHSTAN"] <- "KAZAKH"
+nuclear$region[nuclear$region == "MURUHOA"] <- "MURUROA"
+nuclear$region[nuclear$region == "MURUEOA"] <- "MURUROA"
+nuclear$region[nuclear$region == "N2 RUSS"] <- "NZ RUSS"
+nuclear$region[nuclear$region == "S. ATLANTIC"] <- "S.ATLANTIC"
+nuclear$region[nuclear$region == "TUYMEN RUSS"] <- "TYUMEN RUSS"
+nuclear$region[nuclear$region == "UKEAINE"] <- "UKRAINE"
+nuclear$region[nuclear$region == "W MURUROA"] <- "MURUROA"
+nuclear$region[nuclear$region == "WSW MURUROA"] <- "MURUROA"
+nuclear$region[nuclear$region == "HURUROA"] <- "MURUROA"
+nuclear$region[nuclear$region == "MUEUEOA"] <- "MURUROA"
+
+# Remove these that yield = 0
+to_remove <- which(nuclear$yield_upper == 0)
+nuclear <- nuclear[-to_remove, ]
+
+# Go back to first plot now we have cleaned things up.
+ggplot(nuclear,
+       aes(x = year,
+           y = type,
+           colour = country,
+           size = yield_upper)) +
+  geom_point() +
+  labs(x = "Year",
+       y = "Method of Deployment") +
+  geom_jitter() +
+  scale_colour_brewer(palette = "Paired") +
+  theme_minimal()
+
+```
+
+There seems to be a lot of explosions, in an increasing amount from 1945 to just before 1960 then there is a gap? Why is this?
+
+The explosions then start again, with some very big ones in the early 1960s, from the USSR with deployment type Atmosphere. 
+The types 'shaft' and 'tunnel' then seem to become really popular, with almost all explosions happening in those catgories. 
+
+France have also joined the party, along with China,
+
+Current ideas are that the USA have deployed the most nuclear explosions followed by the USSR - but where are these to? 
+Map the sizes of explosions and locations?
+
+Could think about the different types and how they relate to country that deployed them?
+
+Or I focus on one area that has received the most deployments? 
+Russia and Kazakhstan seem to have a lot - map these to start?
+
+Another interesting project would be to map all of the nuclear explosions in the pacific oceans, seems to be a lot that have happened on islands and atolls.
+
+```{r}
+world <- ne_countries(scale = "medium",
+                      returnclass = "sf")
+class(world)
+
+# Whole world - wow
+ggplot(data = world) +
+  geom_sf() +
+  coord_sf() +
+  geom_point(data = nuclear, 
+             aes(x = longitude, 
+                 y = latitude,
+                 colour = country,
+                 size = yield_upper),
+             shape = 16)
+
+# There are some big ones going on in Russia - very big, but the rest seem to be much smaller.
+
+# How about just russia?
+basemap_russia <- ggplot(data = world) +
+  geom_sf() +
+  coord_sf(xlim = c(25, 140),
+           ylim = c(35, 85),
+           expand = FALSE) +
+  geom_point(data = nuclear, 
+             aes(x = longitude, 
+                 y = latitude,
+                 colour = type,
+                 size = yield_upper),
+             shape = 16) +
+  theme_void()
+basemap_russia
+
+# As above, some extra large ones in Russia.
+
+```
+
+The world map with nuclear explosions on looks interesting - can I animate this to show new explosions over the years? Or make it interactive...
+
+Currently they are coloured by country that deployed them. Would be interesting to change size to be opaque and relative to size of explosion.
+Which measure of size is best for this?
+As discovered above the magnitude measurements have some values of zero because these are the measurements that were reported by outside sources. I think upper yield (kilotons) is going to be the best measure of size.
+
+What about purpose?
+
+```{r}
+
+hist(nuclear$yield_upper)
+# A lot of explosions below 5000 kilotons, and very few above this
+# subset?
+
+to_remove <- which(nuclear$yield_upper > 5000)
+# Only 24 explosions are larger than 5000
+
+# New subset dataset containing only those explosions that are under 5000 kilotons TNT yield estimate.
+
+nuclear2 <- nuclear[-to_remove, ]
+
+# Left with 1991 observations, which is plenty!
+
+# Now lets return to the trusty plot we made to begin with showing type vs year vs size vs country!
+graph1 <- ggplot(nuclear2,
+       aes(x = year,
+           y = type,
+          colour = country,
+           size = yield_upper)) +
+  geom_point() +
+  labs(x = "Year",
+       y = "Method of Deployment") +
+  geom_jitter() +
+  scale_colour_brewer(palette = "Paired") +
+  theme_minimal() +
+  facet_wrap("country")
+
+# Facet for country - India and Pakistan are not adding much and very late in the timescale
+# Lets remove them so we are only left with China, France, UK, USA and USSR.
+india <- which(nuclear2$country == "INDIA")
+nuclear2 <- nuclear2[-india, ]
+pakistan <- which(nuclear2$country == "PAKIST")
+nuclear2 <- nuclear2[-pakistan, ]
+
+# Plot again.
+graph2 <- ggplot(nuclear2,
+       aes(x = year,
+           y = type,
+          colour = country,
+           size = yield_upper)) +
+  geom_point(position = "jitter") +
+  labs(x = "Year",
+       y = "Method of Deployment") +
+  scale_colour_brewer(palette = "Pastel1") +
+  theme_minimal()
+
+graph2 +
+    transition_states(states = year,
+                    transition_length = 3,
+                    state_length = 1, 
+                    wrap = T) +
+  shadow_mark()
+
+# The scale has been revised as the largest explosion is now 5000 kilotons.
+
+# A gap - before and after 1960.
+
+# There is a lot going on in the shaft and tunnel columns after 1960.
+
+shaft <- which(nuclear2$type == "SHAFT")
+tunnel <- which(nuclear2$type == "TUNNEL")
+
+```
+
+```{r}
+
+world_plot <- ggplot(data = world) +
+               geom_sf(fill = "black", colour = NA) +
+               labs(title = "Nuclear Explosions 1945-1984",
+                    x = "", y = "",
+                    subtitle = "Comparison of Yield (kilotons)") +
+               theme(plot.title = element_text(hjust = 0.5,
+                                               face = "bold"),
+                     plot.subtitle = element_text(hjust = 0.5, 
+                                                  size = 12),
+                     panel.background = element_rect("darkgrey"),
+                     panel.grid = element_blank()) +
+               coord_sf() +
+               geom_point(data = nuclear2, 
+                        aes(x = longitude, 
+                            y = latitude,
+                            colour = country,
+                            alpha = 0.1,
+                            size = yield_upper)) +
+               scale_colour_brewer(palette = "YlOrRd")
+world_plot +
+    transition_states(states = year,
+                      transition_length = 3,
+                      state_length = 3, 
+                      wrap = T) +
+  shadow_mark()
+```
+
+
+Leaflet package... to create an interactive map
+
+```{r}
+library(leaflet)
+names(nuclear2)
+summary(nuclear2$yield_upper)
+
+# Create text to use on labels.
+mytext <- paste("Region: ", nuclear2$region, "<br/>",
+                "Surface Magnitude: ", nuclear2$magnitude_surface, "<br/>",
+                "Purpose: ", nuclear2$purpose, "<br/>",
+                "Type: ", nuclear2$type, "<br/>",
+                "Upper Yield: ", nuclear2$yield_upper, "<br/>",
+                sep="") %>%
+  lapply(htmltools::HTML)
+
+# Create bins
+mybins <- seq(0, 5000, by = 500)
+# Define colour palette
+mypalette <- colorBin(palette = "RdYlBu",
+                      domain = nuclear2$yield_upper,
+                      na.color = "transparent", 
+                      bins = mybins)
+
+# Make map
+leaflet_map1 <- leaflet(nuclear2) %>%
+  addTiles() %>%
+  setView(lat = 60, lng = 80, zoom = 3) %>% # Starting view
+  addProviderTiles("Esri.WorldImagery") %>% # Background map
+  addCircles(~longitude, ~latitude, # Points for circles
+             fillColor = ~mypalette(yield_upper), # colour by yield
+             fillOpacity = 0.7, # make opaque
+             color = "white",  # colour of edge?
+             radius = ~(yield_upper)*10, # radius
+             stroke = FALSE, # no edge on circles
+             weight = 1, # hmm edge of lines?
+    label = mytext, 
+    labelOptions = labelOptions(style = list("font-weight" = "normal",
+                                             padding = "3px 8px"), 
+                                textsize = "13px", 
+                                direction = "auto")) %>%
+  addLegend(pal = mypalette,
+            values = ~yield_upper, 
+            opacity = 0.9, 
+            title = "Yield (kilotons)", 
+            position = "bottomright")
+
+
+addTimeline(map = leaflet_map1,
+            data = nuclear2,
+            group = "year",
+            sliderOptions(start = 1945, 
+                          end = 1998,
+                          position = "bottomleft",
+                          steps = 1))
+
+```
+
+This looks fine, but very cluttered. Not able to see the proportions of the various nuclear explosions because there is such a range in size (yield) and spaced far apart. 
+
+Is the map actually adding much being the whole world, everything spread out, not much detail? The only major variations are in the Test Site North of Russia, The Nevada Test Site, Pacific Ocean sites at Mururoa and Fangataufa and the Semi Kazakhstan Test Site. 
+Four smaller non-animated maps for these? Animated by year?
+
+```{r}
+table(nuclear2$yield_upper)
+
+# There are 36 explosions with upper yield of 0
+# Around 100 explosions with yields of over 1000 - lets subset these
+
+nuclear3 <- nuclear2 %>%
+  filter(yield_upper > 900)
+# 127 now subset into a new dataset called nuclear 3:
+# lets map these:
+
+mytext3 <- paste("Name: ", nuclear3$name, "<br/>",
+                 "Body Magnitude: ", nuclear3$magnitude_body, "<br/>",
+                "Surface Magnitude: ", nuclear3$magnitude_surface, "<br/>",
+                "Purpose: ", nuclear3$purpose, "<br/>",
+                "Type: ", nuclear3$type, "<br/>",
+                sep="") %>%
+  lapply(htmltools::HTML)
+
+mybins3 <- seq(1000, 25000, by = 2500)
+mypalette3 <- colorBin(palette = "RdYlBu",
+                      domain = nuclear2$yield_upper,
+                      na.color = "transparent",
+                      bins = mybins3)
+
+leaflet_map3 <- leaflet(nuclear3) %>%
+  addTiles() %>%
+  setView(lat = 60, lng = 80, zoom = 3) %>%
+  addProviderTiles("Esri.WorldImagery") %>%
+  addCircles(~longitude, ~latitude,
+             fillColor = ~mypalette3(yield_upper), 
+             fillOpacity = 0.7, 
+             color = "white", 
+             radius = ~(yield_upper), 
+             stroke = TRUE, 
+             weight = 1,
+    label = mytext3,
+    labelOptions = labelOptions(style = list("font-weight" = "normal",
+                                padding = "3px 8px"),
+                                textsize = "13px",
+                                direction = "auto")) %>%
+  addLegend(pal = mypalette3,
+            values = ~yield_upper, 
+            opacity = 0.9,
+            title = "Yield (kt)",
+            position = "bottomright")
 
 ```
 
