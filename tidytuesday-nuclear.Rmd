@@ -13,7 +13,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, import}
 nuclear <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-08-20/nuclear_explosions.csv")
 
-
 library(ggplot2)
 library(tidyverse)
 library(RColorBrewer)
@@ -30,10 +29,9 @@ library(rgeos)
 library(plotly)
 library(leaftime)
 
-
 ```
 
-The dataset used here is the TidyTuesday Nuclear Explosions dataset. It contains 2051 observations of nuclear explosions that occurred between 1945 and 1998. Not every year saw a nuclear explosion.
+The dataset used is the TidyTuesday Nuclear Explosions dataset. It contains 2051 observations of nuclear explosions that occurred between 1945 and 1998. Not every year saw a nuclear explosion.
 
 The observation data includes:
 - Date of event: long date and year.
@@ -191,11 +189,11 @@ ggplot(nuclear,
 There seems to be a lot of explosions, in an increasing amount from 1945 to just before 1960 then there is a gap? Why is this?
 
 The explosions then start again, with some very big ones in the early 1960s, from the USSR with deployment type Atmosphere. 
-The types 'shaft' and 'tunnel' then seem to become really popular, with almost all explosions happening in those catgories. 
+The types 'shaft' and 'tunnel' then seem to become really popular, with almost all explosions happening in those categories. 
 
 France have also joined the party, along with China,
 
-Current ideas are that the USA have deployed the most nuclear explosions followed by the USSR - but where are these to? 
+Current ideas for a data viz are that the USA have deployed the most nuclear explosions followed by the USSR - but where are these to? 
 Map the sizes of explosions and locations?
 
 Could think about the different types and how they relate to country that deployed them?
@@ -242,7 +240,7 @@ basemap_russia
 
 ```
 
-The world map with nuclear explosions on looks interesting - can I animate this to show new explosions over the years? Or make it interactive...
+The world map with nuclear explosions on looks interesting - can I animate this to show new explosions over the years?
 
 Currently they are coloured by country that deployed them. Would be interesting to change size to be opaque and relative to size of explosion.
 Which measure of size is best for this?
@@ -319,30 +317,55 @@ tunnel <- which(nuclear2$type == "TUNNEL")
 ```{r}
 
 world_plot <- ggplot(data = world) +
-               geom_sf(fill = "black", colour = NA) +
-               labs(title = "Nuclear Explosions 1945-1984",
-                    x = "", y = "",
-                    subtitle = "Comparison of Yield (kilotons)") +
+               geom_sf(fill = "grey", colour = NA) +
+               labs(x = "", y = "",
+                    subtitle = "Nuclear Explosions") +
                theme(plot.title = element_text(hjust = 0.5,
-                                               face = "bold"),
+                                               face = "bold",
+                                               size = 14),
                      plot.subtitle = element_text(hjust = 0.5, 
-                                                  size = 12),
-                     panel.background = element_rect("darkgrey"),
-                     panel.grid = element_blank()) +
-               coord_sf() +
-               geom_point(data = nuclear2, 
+                                                  size = 12, 
+                                                  face = "bold"),
+                     panel.background = element_rect("black"),
+                     panel.grid = element_blank(),
+                     legend.justification=c(1,0), 
+                     legend.box = "horizontal") +
+                coord_sf() +
+                geom_point(data = nuclear2, 
                         aes(x = longitude, 
                             y = latitude,
-                            colour = country,
-                            alpha = 0.1,
-                            size = yield_upper)) +
-               scale_colour_brewer(palette = "YlOrRd")
-world_plot +
+                            size = yield_upper, 
+                            colour = country),
+                            alpha = 0.4) +
+  scale_size_area(name = "Yield (kilotons)") +
+               scale_colour_brewer(palette = "YlOrRd") +
+  annotate(geom = "text", x = 110, y = 33, label = "CHINA",
+           size = 4, colour = "#ffeda0") +
+   annotate(geom = "text", x = 14, y = 50, label = "FRANCE",
+           size = 4, colour = "#fed976") +
+   annotate(geom = "text", x = 0, y = 60, label = "UK",
+           size = 4, colour = "#fd8d3c") +
+   annotate(geom = "text", x = -90, y = 40, label = "USA",
+           size = 4, colour = "#fc4e2a") +
+   annotate(geom = "text", x = 110, y = 70, label = "Former USSR",
+           size = 4, colour = "#bd0026") +
+  guides(colour = FALSE)
+
+world_plot
+
+world_anim <- world_plot +
     transition_states(states = year,
-                      transition_length = 3,
-                      state_length = 3, 
+                      transition_length = 5,
+                      state_length = 5, 
                       wrap = T) +
+  labs(title = 'Year: {closest_state}') +
   shadow_mark()
+
+
+animate(world_anim, 
+        height = 600,
+        width = 1000)
+
 ```
 
 
@@ -354,11 +377,21 @@ names(nuclear2)
 summary(nuclear2$yield_upper)
 
 # Create text to use on labels.
-mytext <- paste("Region: ", nuclear2$region, "<br/>",
-                "Surface Magnitude: ", nuclear2$magnitude_surface, "<br/>",
-                "Purpose: ", nuclear2$purpose, "<br/>",
-                "Type: ", nuclear2$type, "<br/>",
-                "Upper Yield: ", nuclear2$yield_upper, "<br/>",
+mytext <- paste("Region: ", 
+                nuclear2$region,
+                "<br/>",
+                "Surface Magnitude: ",
+                nuclear2$magnitude_surface,
+                "<br/>",
+                "Purpose: ",
+                nuclear2$purpose,
+                "<br/>",
+                "Type: ",
+                nuclear2$type,
+                "<br/>",
+                "Upper Yield: ",
+                nuclear2$yield_upper,
+                "<br/>",
                 sep="") %>%
   lapply(htmltools::HTML)
 
@@ -412,44 +445,49 @@ Four smaller non-animated maps for these? Animated by year?
 ```{r}
 table(nuclear2$yield_upper)
 
-# There are 36 explosions with upper yield of 0
-# Around 100 explosions with yields of over 1000 - lets subset these
-
-nuclear3 <- nuclear2 %>%
-  filter(yield_upper > 900)
-# 127 now subset into a new dataset called nuclear 3:
 # lets map these:
 
-mytext3 <- paste("Name: ", nuclear3$name, "<br/>",
-                 "Body Magnitude: ", nuclear3$magnitude_body, "<br/>",
-                "Surface Magnitude: ", nuclear3$magnitude_surface, "<br/>",
-                "Purpose: ", nuclear3$purpose, "<br/>",
-                "Type: ", nuclear3$type, "<br/>",
+mytext3 <- paste("Name: ",
+                 nuclear2$name,
+                 "<br/>",
+                 "Year: ",
+                 nuclear2$year,
+                 "<br/>",
+                 "Yield Estimate: ",
+                 nuclear2$yield_upper,
+                "<br/>",
+                "Purpose: ",
+                nuclear2$purpose,
+                "<br/>",
+                "Type: ",
+                nuclear2$type,
+                "<br/>",
                 sep="") %>%
   lapply(htmltools::HTML)
 
-mybins3 <- seq(1000, 25000, by = 2500)
-mypalette3 <- colorBin(palette = "RdYlBu",
+mybins3 <- seq(0, 5000, by = 1000)
+mypalette3 <- colorBin(palette = "YlOrRd",
                       domain = nuclear2$yield_upper,
                       na.color = "transparent",
                       bins = mybins3)
+nuclear_icon <- makeIcon(iconUrl = "https://i.postimg.cc/hjM8q71z/nuclear-icon.png", iconWidth = 20, iconHeight = 30,
+iconAnchorX = 0, iconAnchorY = 0,
+)
 
-leaflet_map3 <- leaflet(nuclear3) %>%
+leaflet_map3 <- leaflet(nuclear2) %>%
   addTiles() %>%
   setView(lat = 60, lng = 80, zoom = 3) %>%
-  addProviderTiles("Esri.WorldImagery") %>%
-  addCircles(~longitude, ~latitude,
-             fillColor = ~mypalette3(yield_upper), 
-             fillOpacity = 0.7, 
-             color = "white", 
-             radius = ~(yield_upper), 
-             stroke = TRUE, 
-             weight = 1,
+  addProviderTiles(providers$Stamen.Toner) %>%
+  addMarkers(~longitude,
+             ~latitude,
+             popup = ~(mytext3),
+             icon = nuclear_icon, 
     label = mytext3,
     labelOptions = labelOptions(style = list("font-weight" = "normal",
                                 padding = "3px 8px"),
                                 textsize = "13px",
-                                direction = "auto")) %>%
+                                direction = "auto"),
+    clusterOptions = markerClusterOptions()) %>%
   addLegend(pal = mypalette3,
             values = ~yield_upper, 
             opacity = 0.9,
