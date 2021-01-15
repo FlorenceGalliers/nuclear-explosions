@@ -28,7 +28,9 @@ library(rnaturalearthdata)
 library(rgeos)
 library(plotly)
 library(leaftime)
-
+library(shiny)
+library(htmltools)
+library(htmlwidgets)
 ```
 
 The dataset used is the TidyTuesday Nuclear Explosions dataset. It contains 2051 observations of nuclear explosions that occurred between 1945 and 1998. Not every year saw a nuclear explosion.
@@ -448,16 +450,12 @@ table(nuclear2$yield_upper)
 
 # lets map these:
 
+# Text for popups
 mytext3 <- paste("Name: ",
                  nuclear2$name,
                  "<br/>",
                  "Year: ",
                  nuclear2$year,
-                 "<br/>",
-                 "Deployed by: ", nuclear$country, 
-                 "<br/>",
-                 "To: ", 
-                 nuclear$region,
                  "<br/>",
                  "Yield Estimate: ",
                  nuclear2$yield_upper,
@@ -468,27 +466,56 @@ mytext3 <- paste("Name: ",
                 "Type: ",
                 nuclear2$type,
                 "<br/>",
+                "<strong>",
+                 "Deployed by: ", 
+                 nuclear2$country, 
+                 "<br/>",
+                 "To: ", 
+                 nuclear2$region,
+                 "<br/>",
                 sep="") %>%
   lapply(htmltools::HTML)
 
+# colour palette
 mypalette3 <- colorFactor(palette = "Paired",
                       domain = nuclear2$country,
                       na.color = "transparent")
-nuclear_icon <- makeIcon(iconUrl = "https://i.postimg.cc/hjM8q71z/nuclear-icon.png", iconWidth = 20, iconHeight = 30,
+# Define nuclear icon for markers
+nuclear_icon <- makeIcon(iconUrl = "https://i.postimg.cc/hjM8q71z/nuclear-icon.png", iconWidth = 30, iconHeight = 45,
 iconAnchorX = 0, iconAnchorY = 0)
+
+# add title
+tag.map.title <- tags$style(HTML("
+  .leaflet-control.map-title { 
+    transform: translate(-50%,20%);
+    position: fixed !important;
+    left: 50%;
+    text-align: center;
+    padding-left: 10px; 
+    padding-right: 10px; 
+    background: rgba(255,255,255,0.75);
+    font-weight: bold;
+    font-size: 28px;
+  }
+"))
+
+title <- tags$div(
+  tag.map.title, HTML("Nuclear Explosions 1945-1998")
+)  
 
 leaflet_map3 <- leaflet(nuclear2) %>%
   addTiles() %>%
-  setView(lat = 60, lng = 80, zoom = 3) %>%
-  addProviderTiles(providers$Stamen.Toner) %>%
+  setView(lat = 50, lng = 0, zoom = 1.5) %>%
+  addProviderTiles(providers$Stamen.Toner,
+                   options = providerTileOptions(opacity = 0.8)) %>%
   addMarkers(~longitude,
              ~latitude,
              #popup = ~(mytext3),
              icon = nuclear_icon, 
-    label = mytext3,
-    labelOptions = labelOptions(style = list("font-weight" = "normal",
+    popup = mytext3,
+    popupOptions = popupOptions(style = list("font-weight" = "normal",
                                 padding = "3px 8px",
-                                textsize = "13px",
+                                textsize = "15px",
                                 direction = "auto")),
     clusterOptions = markerClusterOptions()) %>%
   addCircles(~longitude,
@@ -499,7 +526,8 @@ leaflet_map3 <- leaflet(nuclear2) %>%
              opacity = 0.3,
              highlightOptions = highlightOptions(color = "white",
                                                  weight = 2,
-                                                 bringToFront = TRUE))
+                                                 bringToFront = TRUE)) +
+    addControl(title, position = "topleft", className="map-title")
 
 ```
 
