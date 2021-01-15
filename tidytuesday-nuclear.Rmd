@@ -454,6 +454,11 @@ mytext3 <- paste("Name: ",
                  nuclear2$year,
                  "<br/>",
                  "Yield Estimate: ",
+                 "Deployed by :", nuclear$country, 
+                 "<br/>",
+                 "To :", 
+                 nuclear$region,
+                 "<br/>",
                  nuclear2$yield_upper,
                 "<br/>",
                 "Purpose: ",
@@ -465,11 +470,9 @@ mytext3 <- paste("Name: ",
                 sep="") %>%
   lapply(htmltools::HTML)
 
-mybins3 <- seq(0, 5000, by = 1000)
-mypalette3 <- colorBin(palette = "YlOrRd",
-                      domain = nuclear2$yield_upper,
-                      na.color = "transparent",
-                      bins = mybins3)
+mypalette3 <- colorFactor(palette = "YlOrRd",
+                      domain = nuclear2$country,
+                      na.color = "transparent")
 nuclear_icon <- makeIcon(iconUrl = "https://i.postimg.cc/hjM8q71z/nuclear-icon.png", iconWidth = 20, iconHeight = 30,
 iconAnchorX = 0, iconAnchorY = 0,
 )
@@ -484,14 +487,15 @@ leaflet_map3 <- leaflet(nuclear2) %>%
              icon = nuclear_icon, 
     label = mytext3,
     labelOptions = labelOptions(style = list("font-weight" = "normal",
-                                padding = "3px 8px"),
+                                padding = "3px 8px",
+                                color = ~country),
                                 textsize = "13px",
                                 direction = "auto"),
-    clusterOptions = markerClusterOptions()) %>%
+    clusterOptions = markerClusterOptions(freezeAtZoom = 5)) %>%
   addLegend(pal = mypalette3,
-            values = ~yield_upper, 
+            values = ~country, 
             opacity = 0.9,
-            title = "Yield (kt)",
+            title = "Country",
             position = "bottomright")
 
 ```
