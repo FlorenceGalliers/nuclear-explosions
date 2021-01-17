@@ -318,7 +318,7 @@ tunnel <- which(nuclear2$type == "TUNNEL")
 ```
 
 ```{r}
-
+library(gganimate)
 world_plot <- ggplot(data = world) +
                geom_sf(fill = "grey", colour = NA) +
                labs(x = "", y = "",
@@ -507,7 +507,7 @@ leaflet_map3 <- leaflet(nuclear2) %>%
   addTiles() %>%
   setView(lat = 50, lng = 0, zoom = 1.5) %>%
   addProviderTiles(providers$Stamen.Toner,
-                   options = providerTileOptions(opacity = 0.8)) %>%
+                   options = providerTileOptions(opacity = 0.9)) %>%
   addMarkers(~longitude,
              ~latitude,
              #popup = ~(mytext3),
@@ -526,8 +526,6 @@ leaflet_map3 <- leaflet(nuclear2) %>%
              opacity = 0.3,
              highlightOptions = highlightOptions(color = "white",
                                                  weight = 2,
-                                                 bringToFront = TRUE)) +
-    addControl(title, position = "topleft", className="map-title")
-
+                                                 bringToFront = TRUE))
 ```
 
